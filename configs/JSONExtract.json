@@ -1,0 +1,24 @@
+{
+    "challenge_module": "Challenge.Instances.JSONExtract.Challenge",
+    "solution_module": "Solution.JSONExtract.Main",
+    "theorem_names": [
+        "Solution.JSONExtract.soundness",
+        "Solution.JSONExtract.completeness",
+        "Solution.JSONExtract.mainCost",
+        "Solution.JSONExtract.isR1CS",
+        "Solution.JSONExtract.witgenIsIR",
+        "Solution.JSONExtract.computableWitness",
+        "Solution.JSONExtract.requirementsChannelsLawful"
+    ],
+    "definition_names": [
+        "Solution.JSONExtract.main",
+        "Solution.JSONExtract.elaborated"
+    ],
+    "permitted_axioms": [
+        "propext",
+        "Quot.sound",
+        "Classical.choice",
+        "Challenge.Instances.JSONExtract.Interface.hCircomPrime"
+    ],
+    "enable_nanoda": false
+}

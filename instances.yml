@@ -554,6 +554,97 @@ bls12-381-g1-fixed-base-scalar-mul:
   baseline:
     allocations: 12521205
     constraints: 12663507
+google-id-token-claims-extraction:
+  type: public
+  instance: JSONExtract
+  config: configs/JSONExtract.json
+  cost: Challenge/Instances/JSONExtract/Cost.lean
+  namespace: Solution.JSONExtract
+  files:
+  - configs/JSONExtract.json
+  - Challenge/Specs/Parser.lean
+  - Challenge/Specs/JSON.lean
+  - Challenge/Specs/JSONSchema.lean
+  - Challenge/Specs/JSONExtract.lean
+  - Challenge/Utils/CostR1CS.lean
+  - Challenge/Utils/WitgenIR.lean
+  - Challenge/Utils/ComputableWitnessLemmas.lean
+  - Challenge/Instances/JSONExtract
+  - Solution/JSONExtract
+  - Tests/Parser.lean
+  - Tests/JSON.lean
+  - Tests/JSONExtract.lean
+  content:
+    title: Google ID Token Claims Extraction
+    description: "# Google ID Token Claims Extraction\n\nYour goal is to build a circuit\
+      \ that takes the JSON payload of a Google ID token (the\nclaims object of the\
+      \ JWT, already base64url-decoded), checks that it is\na well-formed token of\
+      \ the Google schema, and extracts the claims of\ninterest into fixed-size output\
+      \ slots. Any input that is not valid JSON,\nor that does not satisfy the schema,\
+      \ must be **rejected**.\n\n## Input\n\nThe input to the circuit is a buffer\
+      \ of `1024` bytes (one field element per byte) and a\nlength `len <= 1024`.\n\
+      The circuit may assume that every\nbuffer element is a byte and that `len` is\
+      \ in range.\nCrucially, we do not assume *anything* about the contents of the\n\
+      buffer: the circuit is responsible for the full parsing and validation of the\n\
+      document.\n\n## What is a valid token\n\nThe first `len` bytes must parse as\
+      \ a single JSON document, as specified in the\n`Specs.JSON.parseBytes` parser.\
+      \ This parser aims to be RFC 8259 compliant,\nfully supporting escapes and UTF-8.\n\
+      \nFurthermore, the parsed document must satisfy the schema of a Google ID token,\
+      \ as specified in\n`Specs.JSONSchema.IsToken google`. In particular the circuit\
+      \ must enforce that the document:\n\n- Is a JSON **object** with at most **32**\
+      \ members, in any order.\n- Each **known** claim occurs at most once and has\
+      \ the shape its schema\n  entry prescribes, in particular:\n  - `iss`, `sub`,\
+      \ `aud`, `azp`, `email`, `hd`, `nonce`, `at_hash` must be ASCII strings.\n \
+      \ - `iat`, `exp` must be integers.\n  - `email_verified` must be a boolean.\n\
+      - every other claim may carry any **scalar** value (string, number,\n  boolean\
+      \ or `null`): arrays and nested objects are rejected. This is not strictly necessary,\n\
+      \  but it is a simplification for the parsing process.\n\n## Output\n\nThe circuit\
+      \ must output, for each known claim, a boolean flag indicating wether the\n\
+      claim is present, and the extracted value:\n\n- For a **string** value it must\
+      \ output its length and its bytes,\n  zero-padded to the claim's cap.\n- For\
+      \ an **integer** value it must output a sign flag, its digit\n  count and its\
+      \ decimal digit values, zero-padded to 12 digits;\n- For a **boolean** value\
+      \ it must output a presence flag and its binary value.\n\nNotice that the circuit\
+      \ must handle the fact that claims could be in any order\ninside the original\
+      \ document.\n\n## Example\n\nThe following payload of a personal Google account\
+      \ (no `hd`, no `nonce`) is a\nvalid token. It also carries `name`, a claim outside\
+      \ the schema, which is accepted\nand ignored. Written without whitespace it\
+      \ is 313 bytes long, so `len = 313` and the\nrest of the buffer is zero.\n\n\
+      ```json\n{\n  \"iss\": \"https://accounts.google.com\",\n  \"azp\": \"1234987819200-okv4.apps.googleusercontent.com\"\
+      ,\n  \"aud\": \"1234987819200-okv4.apps.googleusercontent.com\",\n  \"sub\"\
+      : \"110169484474386276334\",\n  \"email\": \"jsmith@gmail.com\",\n  \"email_verified\"\
+      : true,\n  \"at_hash\": \"HK6E_P6Dh8Y93mRNtsDB1Q\",\n  \"name\": \"John Smith\"\
+      ,\n  \"iat\": 1353601026,\n  \"exp\": 1353604926\n}\n```\n\nThe expected output\
+      \ is the following:\n\n| claim            | present | value                \
+      \                                      |\n|------------------|---------|------------------------------------------------------------|\n\
+      | `iss`            | 1       | `\"https://accounts.google.com\"` (len 27)  \
+      \                 |\n| `sub`            | 1       | `\"110169484474386276334\"\
+      ` (len 21)                         |\n| `aud`            | 1       | `\"1234987819200-okv4.apps.googleusercontent.com\"\
+      ` (len 45) |\n| `azp`            | 1       | `\"1234987819200-okv4.apps.googleusercontent.com\"\
+      ` (len 45) |\n| `hd`             | 0       | all zeros (len 0)             \
+      \                             |\n| `email`          | 1       | `\"jsmith@gmail.com\"\
+      ` (len 16)                              |\n| `email_verified` | 1       | value\
+      \ 1                                                    |\n| `nonce`        \
+      \  | 0       | all zeros (len 0)                                          |\n\
+      | `at_hash`        | 1       | `\"HK6E_P6Dh8Y93mRNtsDB1Q\"` (len 22)       \
+      \                 |\n| `iat`            | 1       | `[1,3,5,3,6,0,1,0,2,6]`\
+      \ (len 10, positive)                 |\n| `exp`            | 1       | `[1,3,5,3,6,0,4,9,2,6]`\
+      \ (len 10, positive)                 |\n\nNotice that the `name` claim is ignored,\
+      \ and does not appear in the extracted data.\n\n## Specification\n\nThe hearth\
+      \ of the specification is the following function:\n```lean\nif h : input.len.val\
+      \ \u2264 bufferLen then\n  let pre := takePrefix (fieldElemsToNat input.buffer)\
+      \ input.len.val h\n  match Specs.JSON.parseBytes pre.toList with\n  | some j\
+      \ => IsToken google j \u2227 outputToNats output = encodeOutput (GoogleClaims.ofJSON\
+      \ j)\n  | none => False\nelse False\n```\n\nThe spec truncates the input buffer\
+      \ up to `len` bytes, parses it using our reference JSON parser\nand then checks\
+      \ that the parsed document satisfies the Google ID token schema.\nIf so, it\
+      \ extracts the claims of interest and encodes them into the output slots.\n"
+    tags:
+    - json
+    - parsing
+  baseline:
+    allocations: 1370541
+    constraints: 1446970
 gf2-sha256-compress-canonical:
   type: public
   instance: SHA256CompressGF2Canonical
